@@ -2,7 +2,7 @@ from django.conf import settings
 
 autocert_settings_dict = getattr(settings, 'AUTOCERT', {})
 
-LETSENCRYPT_PROD = 'https://acme.api.letsencrypt.org/directory'
+LETSENCRYPT_PROD = 'https://acme-v01.api.letsencrypt.org/directory'
 LETSENCRYPT_STAGING = 'https://acme-staging.api.letsencrypt.org/directory'
 DIRECTORY_URL = autocert_settings_dict.get('DIRECTORY_URL', LETSENCRYPT_PROD)
 

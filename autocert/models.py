@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 from datetime import timedelta
 import OpenSSL
-from acme import challenges
 from acme import client as acme_client
 from acme import jose
 from django.db import models
@@ -39,8 +38,9 @@ class AcmeKeyModel(models.Model):
 
     def get_unencrypted_key(self):
         return self.get_key().private_bytes(encoding=serialization.Encoding.PEM,
-                                     format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                     encryption_algorithm=serialization.NoEncryption())
+                                            format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                            encryption_algorithm=serialization.NoEncryption())
+
 
 class Account(AcmeKeyModel):
     name = models.CharField(max_length=255, default='New Account')
