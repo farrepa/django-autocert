@@ -154,6 +154,16 @@ class Certificate(AcmeKeyModel):
     def certificate_expires_soon(self, days_left=30):
         return datetime.utcnow() + timedelta(days=days_left) > self.expiry_date
 
+    def renew_and_write_if_expiring_soon(self, days_left=30):
+        if self.certificate_expires_soon(days_left=days_left):
+            self.request_challenges_and_cert()
+            self.write_to_disk()
+
+    @classmethod
+    def renew_and_write_all_if_expiring_soon(cls, days_left=30):
+        for cert in cls.objects.all():
+            cert.renew_and_write_if_expiring_soon(days_left=days_left)
+
     @property
     def full_certificate(self):
         if self.certificate:
