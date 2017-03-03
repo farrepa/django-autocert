@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 import OpenSSL
 from acme import client as acme_client
+from acme import errors
 from acme import jose
 from django.db import models
 from django.dispatch import receiver
@@ -40,7 +41,6 @@ class AcmeKeyModel(models.Model):
         return self.get_key().private_bytes(encoding=serialization.Encoding.PEM,
                                             format=serialization.PrivateFormat.TraditionalOpenSSL,
                                             encryption_algorithm=serialization.NoEncryption())
-
 
 class Account(AcmeKeyModel):
     name = models.CharField(max_length=255, default='New Account')
@@ -122,8 +122,12 @@ class Certificate(AcmeKeyModel):
         for domain in self.get_all_domains():
             challenge = Challenge.objects.create(certificate=self, domain=domain)
             authzrs.append(challenge.request_challenge())
-        certr, authzrs = client.poll_and_request_issuance(self.get_wrapped_csr(), authzrs)
-        self.fetch_certificate_and_chain(certr)
+        try:
+            certr, authzrs = client.poll_and_request_issuance(self.get_wrapped_csr(), authzrs)
+        except (errors.Error, errors.PollError) as e:
+            log.error("Challenge polling or issuance failed: {}".format(self.domain, e))
+        else:
+            self.fetch_certificate_and_chain(certr)
 
     def fetch_certificate_and_chain(self, certr):
         client = self.account.get_client()
