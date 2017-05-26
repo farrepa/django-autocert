@@ -1,4 +1,5 @@
 # coding=utf-8
+from __future__ import unicode_literals
 import logging
 import os
 from datetime import datetime
@@ -28,19 +29,20 @@ class AcmeKeyModel(models.Model):
         abstract = True
 
     def get_key(self):
-        password = b'{}'.format(settings.ACCOUNT_KEY_PASSWORD)
+        password = settings.ACCOUNT_KEY_PASSWORD.encode()
         if not self.key:
             key = rsa.generate_private_key(public_exponent=65537, key_size=settings.BITS, backend=default_backend())
             self.key = key.private_bytes(encoding=serialization.Encoding.PEM,
                                          format=serialization.PrivateFormat.TraditionalOpenSSL,
                                          encryption_algorithm=serialization.BestAvailableEncryption(password))
             self.save()
-        return serialization.load_pem_private_key(str(self.key), password=password, backend=default_backend())
+        return serialization.load_pem_private_key(self.key.encode(), password=password, backend=default_backend())
 
     def get_unencrypted_key(self):
         return self.get_key().private_bytes(encoding=serialization.Encoding.PEM,
                                             format=serialization.PrivateFormat.TraditionalOpenSSL,
                                             encryption_algorithm=serialization.NoEncryption())
+
 
 class Account(AcmeKeyModel):
     name = models.CharField(max_length=255, default='New Account')
@@ -101,11 +103,11 @@ class Certificate(AcmeKeyModel):
         builder = x509.CertificateSigningRequestBuilder()
         builder = builder.subject_name(x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, self.get_domain()),
-            x509.NameAttribute(NameOID.COUNTRY_NAME, unicode(self.account.country)),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, unicode(self.account.state)),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, unicode(self.account.locality)),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, unicode(self.account.organization_name)),
-            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, unicode(self.account.organizational_unit_name)),
+            x509.NameAttribute(NameOID.COUNTRY_NAME, self.account.country),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, self.account.state),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, self.account.locality),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, self.account.organization_name),
+            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self.account.organizational_unit_name),
         ]))
         builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
         csr = builder.sign(private_key, hashes.SHA256(), default_backend())
@@ -139,10 +141,12 @@ class Certificate(AcmeKeyModel):
             self.intermediate_certificates += OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, i.wrapped)
         self.save()
 
-    def get_crt_path(self, domain):
+    @staticmethod
+    def get_crt_path(domain):
         return os.path.join(settings.OUTPUT_DIR, domain + '.crt')
 
-    def get_key_path(self, domain):
+    @staticmethod
+    def get_key_path(domain):
         return os.path.join(settings.OUTPUT_DIR, domain + '.key')
 
     def write_to_disk(self):
@@ -151,7 +155,7 @@ class Certificate(AcmeKeyModel):
                 with open(self.get_crt_path(domain), 'w') as f:
                     f.write(self.full_certificate)
                 with open(self.get_key_path(domain), 'w') as f:
-                    f.write(self.get_unencrypted_key())
+                    f.write(self.get_unencrypted_key().decode())
         else:
             log.error('No OUTPUT_DIR specified')
 
@@ -186,6 +190,7 @@ class Certificate(AcmeKeyModel):
         if self.certificate:
             cert = x509.load_pem_x509_certificate(str(self.certificate), default_backend())
             return cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+
 
 class Challenge(models.Model):
     certificate = models.ForeignKey(Certificate, related_name='challenges')
