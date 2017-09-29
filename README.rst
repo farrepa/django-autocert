@@ -30,8 +30,7 @@ RHEL/Fedora
 
 macOS
 ``brew install openssl``
-``env LDFLAGS="-L$(brew --prefix openssl)/lib" CFLAGS="-I$(brew --prefix openssl)/include"
-  pip install cryptography``
+``env LDFLAGS="-L$(brew --prefix openssl)/lib" CFLAGS="-I$(brew --prefix openssl)/include" pip install cryptography``
 
 
 License
