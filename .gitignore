@@ -1,4 +1,6 @@
-env
-build
-dist
-django_autocert.egg-info
+/env/
+/build/
+/dist/
+/*.egg-info
+*.pyc
+
