@@ -94,7 +94,10 @@ class Certificate(AcmeKeyModel):
         return [u'{}.{}'.format(subdomain, self.get_domain()) for subdomain in settings.SUBDOMAINS_TO_REQUEST]
 
     def get_all_domains(self):
-        return [self.get_domain()] + self.get_subdomains()
+        if self.domain and not self.all_domains_to_request:
+            self.all_domains_to_request = [self.get_domain()] + self.get_subdomains()
+            self.save()
+        return self.all_domains_to_request
 
     def get_san_entries(self):
         return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()]
