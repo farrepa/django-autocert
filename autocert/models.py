@@ -95,8 +95,15 @@ class Certificate(AcmeKeyModel):
     modified = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        self.set_key_if_blank()
+        self.set_domains_to_request_if_blank()
         self.set_csr_if_blank()
         super(Certificate, self).save(*args, **kwargs)
+
+    def set_domains_to_request_if_blank(self):
+        if self.site and not self.domains_to_request:
+            self.domains_to_request = ' '.join([self.get_domain()] + self.get_subdomains())
+
     def get_domain(self):
         return self.domain or u'{}{}'.format(settings.ENV_PREFIX, self.site.domain)
 
@@ -104,10 +111,7 @@ class Certificate(AcmeKeyModel):
         return [u'{}.{}'.format(subdomain, self.get_domain()) for subdomain in settings.SUBDOMAINS_TO_REQUEST]
 
     def get_all_domains(self):
-        if self.domain and not self.all_domains_to_request:
-            self.all_domains_to_request = [self.get_domain()] + self.get_subdomains()
-            self.save()
-        return self.all_domains_to_request
+        return self.domains_to_request.split()
 
     def get_san_entries(self):
         return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()]
