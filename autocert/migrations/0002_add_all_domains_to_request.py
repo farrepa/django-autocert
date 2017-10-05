@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddField(
             model_name='certificate',
-            name='all_domains_to_request',
+            name='domains_to_request',
             field=models.TextField(blank=True, help_text='Space separated list of domains to request in cert'),
         ),
     ]

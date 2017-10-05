@@ -86,7 +86,7 @@ class Account(AcmeKeyModel):
 class Certificate(AcmeKeyModel):
     site = models.OneToOneField('sites.Site', related_name='certificate')
     domain = models.CharField(max_length=255, blank=True)
-    all_domains_to_request = models.TextField(blank=True, help_text='Space separated list of domains to request in cert')
+    domains_to_request = models.TextField(blank=True, help_text='Space separated list of domains to request in cert')
     account = models.ForeignKey(Account)
     csr = models.TextField(blank=True)
     certificate = models.TextField(blank=True)
