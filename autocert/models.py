@@ -30,12 +30,20 @@ class AcmeKeyModel(models.Model):
     def get_key(self):
         password = settings.ACCOUNT_KEY_PASSWORD.encode()
         if not self.key:
-            key = rsa.generate_private_key(public_exponent=65537, key_size=settings.BITS, backend=default_backend())
-            self.key = key.private_bytes(encoding=serialization.Encoding.PEM,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.BestAvailableEncryption(password))
+            self.set_key()
             self.save()
         return serialization.load_pem_private_key(self.key.encode(), password=password, backend=default_backend())
+
+    def set_key(self):
+        password = settings.ACCOUNT_KEY_PASSWORD.encode()
+        key = rsa.generate_private_key(public_exponent=65537, key_size=settings.BITS, backend=default_backend())
+        self.key = key.private_bytes(encoding=serialization.Encoding.PEM,
+                                     format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                     encryption_algorithm=serialization.BestAvailableEncryption(password))
+
+    def set_key_if_blank(self):
+        if not self.key:
+            self.set_key()
 
     def get_unencrypted_key(self):
         return self.get_key().private_bytes(encoding=serialization.Encoding.PEM,
