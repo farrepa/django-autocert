@@ -184,6 +184,10 @@ class Certificate(AcmeKeyModel):
         else:
             raise Exception('No OUTPUT_DIR specified')
 
+    def request_and_write_cert(self):
+        self.request_challenges_and_cert()
+        self.write_to_disk()
+
     def certificate_expires_soon(self, days_left=30):
         if not self.expiry_date:
             return False
