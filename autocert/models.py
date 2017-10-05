@@ -141,7 +141,7 @@ class Certificate(AcmeKeyModel):
         try:
             certr, authzrs = client.poll_and_request_issuance(self.get_wrapped_csr(), authzrs)
         except (errors.Error, errors.PollError) as e:
-            log.error("Challenge polling or issuance failed: {}".format(self.domain, e))
+            raise Exception("Challenge polling or issuance failed: {}".format(self.domain, e))
         else:
             self.fetch_certificate_and_chain(certr)
 
@@ -171,7 +171,7 @@ class Certificate(AcmeKeyModel):
                 with open(self.get_key_path(domain), 'w') as f:
                     f.write(self.get_unencrypted_key().decode())
         else:
-            log.error('No OUTPUT_DIR specified')
+            raise Exception('No OUTPUT_DIR specified')
 
     def certificate_expires_soon(self, days_left=30):
         if not self.expiry_date:
