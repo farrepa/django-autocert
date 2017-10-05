@@ -64,6 +64,10 @@ class Account(AcmeKeyModel):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        self.set_key_if_blank()
+        super(Account, self).save(*args, **kwargs)
+
     def __unicode__(self):
         return u'{}'.format(self.name)
 
