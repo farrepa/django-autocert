@@ -97,8 +97,15 @@ class Certificate(AcmeKeyModel):
     def save(self, *args, **kwargs):
         self.set_key_if_blank()
         self.set_domains_to_request_if_blank()
+        if self.domains_to_request != self.get_previous_value('domains_to_request'):
+            self.csr = ''
         self.set_csr_if_blank()
         super(Certificate, self).save(*args, **kwargs)
+
+    def get_previous_value(self, attr):
+        if self.pk:
+            return getattr(Certificate.objects.get(id=self.pk), attr)
+        return None
 
     def set_domains_to_request_if_blank(self):
         if self.site and not self.domains_to_request:
