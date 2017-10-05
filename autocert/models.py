@@ -9,7 +9,6 @@ from acme import client as acme_client
 from acme import errors
 from acme import jose
 from django.db import models
-from django.dispatch import receiver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -87,6 +86,9 @@ class Certificate(AcmeKeyModel):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        self.set_csr_if_blank()
+        super(Certificate, self).save(*args, **kwargs)
     def get_domain(self):
         return self.domain or u'{}{}'.format(settings.ENV_PREFIX, self.site.domain)
 
@@ -102,21 +104,21 @@ class Certificate(AcmeKeyModel):
     def get_san_entries(self):
         return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()]
 
-    def generate_csr(self):
-        private_key = self.get_key()
-        builder = x509.CertificateSigningRequestBuilder()
-        builder = builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, self.get_domain()),
-            x509.NameAttribute(NameOID.COUNTRY_NAME, self.account.country),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, self.account.state),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, self.account.locality),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, self.account.organization_name),
-            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self.account.organizational_unit_name),
-        ]))
-        builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
-        csr = builder.sign(private_key, hashes.SHA256(), default_backend())
-        self.csr = csr.public_bytes(serialization.Encoding.PEM)
-        self.save()
+    def set_csr_if_blank(self):
+        if not self.csr:
+            private_key = self.get_key()
+            builder = x509.CertificateSigningRequestBuilder()
+            builder = builder.subject_name(x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, self.get_domain()),
+                x509.NameAttribute(NameOID.COUNTRY_NAME, self.account.country),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, self.account.state),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, self.account.locality),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, self.account.organization_name),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self.account.organizational_unit_name),
+            ]))
+            builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
+            csr = builder.sign(private_key, hashes.SHA256(), default_backend())
+            self.csr = csr.public_bytes(serialization.Encoding.PEM)
 
     def get_wrapped_csr(self):
         csr = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_PEM, self.csr)
@@ -223,9 +225,3 @@ class Challenge(models.Model):
         chall_response = challenge.response(jwk_key)
         client.answer_challenge(challenge, chall_response)
         return authzr
-
-
-@receiver(models.signals.post_save, sender=Certificate, dispatch_uid="generate_csr")
-def generate_csr(sender, instance, created, **kwargs):
-    if not instance.csr:
-        instance.generate_csr()
