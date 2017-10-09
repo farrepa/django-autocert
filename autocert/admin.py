@@ -24,24 +24,21 @@ class AccountAdmin(admin.ModelAdmin):
 
 
 class CertificateAdmin(admin.ModelAdmin):
-    list_display = 'site primary_domain expiry_date'.split()
+    list_display = 'site certificate_common_name certificate_expiry_date'.split()
     fieldsets = (
         (None, {
-            'fields': [('site', 'account', 'primary_domain')]
-        }),
-        ('Overrides', {
-            'fields': ['domains_to_request'],
-            'classes': ['collapse']
+            'fields': [('site', 'account'), 'domains_to_request']
         }),
         ('Artifacts', {
-            'fields': ['csr', 'certificate', 'intermediate_certificates']
+            'fields': ['csr', 'certificate', 'intermediate_certificates'],
+            'classes': ['collapse']
         }),
         ('Timestamps', {
-            'fields': ['expiry_date', 'created', 'modified']
+            'fields': ['certificate_expiry_date', 'created', 'modified']
         }),
     )
-    readonly_fields = ('csr', 'certificate', 'intermediate_certificates', 'expiry_date',
-                       'primary_domain', 'created', 'modified')
+    readonly_fields = ('csr', 'certificate', 'intermediate_certificates', 'certificate_expiry_date',
+                       'created', 'modified')
     actions = ['request_and_write_cert']
 
     def request_and_write_cert(self, request, queryset):

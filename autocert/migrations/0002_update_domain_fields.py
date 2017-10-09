@@ -17,4 +17,8 @@ class Migration(migrations.Migration):
             name='domains_to_request',
             field=models.TextField(blank=True, help_text='Space separated list of domains to request in cert'),
         ),
+        migrations.RemoveField(
+            model_name='certificate',
+            name='domain',
+        ),
     ]

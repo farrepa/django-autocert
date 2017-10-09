@@ -90,7 +90,6 @@ class Account(AcmeKeyModel):
 
 class Certificate(AcmeKeyModel):
     site = models.OneToOneField('sites.Site', related_name='certificate')
-    domain = models.CharField(max_length=255, blank=True)
     domains_to_request = models.TextField(blank=True, help_text='Space separated list of domains to request in cert')
     account = models.ForeignKey(Account)
     csr = models.TextField(blank=True)
@@ -120,31 +119,34 @@ class Certificate(AcmeKeyModel):
 
     def set_domains_to_request_if_blank(self):
         if self.site and not self.domains_to_request:
-            self.domains_to_request = ' '.join([self.get_domain()] + self.get_subdomains())
+            self.domains_to_request = ' '.join([self.site.domain] + self.get_default_subdomains())
 
-    def get_domain(self):
-        return self.domain or u'{}{}'.format(settings.ENV_PREFIX, self.site.domain)
-
-    def get_subdomains(self):
-        return [u'{}.{}'.format(subdomain, self.get_domain()) for subdomain in settings.SUBDOMAINS_TO_REQUEST]
+    def get_default_subdomains(self):
+        return [u'{}.{}'.format(subdomain, self.site.domain) for subdomain in settings.DEFAULT_SUBDOMAINS_TO_REQUEST]
 
     def get_all_domains(self):
         return self.domains_to_request.split()
 
+    def get_common_name(self):
+        try:
+            return self.get_all_domains()[0]
+        except IndexError:
+            raise Exception('domains_to_request field is empty')
+
     def get_san_entries(self):
-        return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()]
+        return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()[1:]]
 
     def set_csr_if_blank(self):
         if not self.csr:
             private_key = self.get_key()
             builder = x509.CertificateSigningRequestBuilder()
             builder = builder.subject_name(x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, self.get_domain()),
-                x509.NameAttribute(NameOID.COUNTRY_NAME, self.account.country),
-                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, self.account.state),
-                x509.NameAttribute(NameOID.LOCALITY_NAME, self.account.locality),
-                x509.NameAttribute(NameOID.ORGANIZATION_NAME, self.account.organization_name),
-                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self.account.organizational_unit_name),
+                x509.NameAttribute(NameOID.COMMON_NAME, self.get_common_name()),
+                x509.NameAttribute(NameOID.COUNTRY_NAME, u'{}'.format(self.account.country)),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u'{}'.format(self.account.state)),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, u'{}'.format(self.account.locality)),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, u'{}'.format(self.account.organization_name)),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, u'{}'.format(self.account.organizational_unit_name)),
             ]))
             builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
             csr = builder.sign(private_key, hashes.SHA256(), default_backend())
@@ -163,7 +165,7 @@ class Certificate(AcmeKeyModel):
         try:
             certr, authzrs = client.poll_and_request_issuance(self.get_wrapped_csr(), authzrs)
         except (errors.Error, errors.PollError) as e:
-            raise Exception("Challenge polling or issuance failed: {}".format(self.domain, e))
+            raise Exception("Challenge polling or issuance failed: {}".format(e))
         else:
             self.fetch_certificate_and_chain(certr)
 
@@ -220,13 +222,13 @@ class Certificate(AcmeKeyModel):
             return '{}{}'.format(self.certificate, self.intermediate_certificates)
 
     @property
-    def expiry_date(self):
+    def certificate_expiry_date(self):
         if self.certificate:
             cert = x509.load_pem_x509_certificate(str(self.certificate), default_backend())
             return cert.not_valid_after
 
     @property
-    def primary_domain(self):
+    def certificate_common_name(self):
         if self.certificate:
             cert = x509.load_pem_x509_certificate(str(self.certificate), default_backend())
             return cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
