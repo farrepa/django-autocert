@@ -8,6 +8,7 @@ import OpenSSL
 from acme import client as acme_client
 from acme import errors
 from acme import jose
+from django.contrib.sites.models import Site
 from django.db import models
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -97,6 +98,12 @@ class Certificate(AcmeKeyModel):
     intermediate_certificates = models.TextField(blank=True)
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
+
+    def __unicode__(self):
+        try:
+            return u'Certificate for {}'.format(self.site)
+        except Site.DoesNotExist:
+            return u'Certificate for an undefined site'
 
     def save(self, *args, **kwargs):
         self.set_key_if_blank()
