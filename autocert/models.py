@@ -202,9 +202,9 @@ class Certificate(AcmeKeyModel):
         self.write_to_disk()
 
     def certificate_expires_soon(self, days_left=30):
-        if not self.expiry_date:
+        if not self.certificate_expiry_date:
             return False
-        return datetime.utcnow() + timedelta(days=days_left) > self.expiry_date
+        return datetime.utcnow() + timedelta(days=days_left) > self.certificate_expiry_date
 
     def renew_and_write_if_expiring_soon(self, days_left=30):
         if self.certificate_expires_soon(days_left=days_left):
