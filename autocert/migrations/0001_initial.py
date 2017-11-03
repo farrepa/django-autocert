@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('sites', '0002_alter_domain_unique'),
+        ('sites', '0001_initial'),
     ]
 
     operations = [
@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('key', models.TextField(editable=False)),
                 ('name', models.CharField(default=b'New Account', max_length=255)),
-                ('directory_url', models.CharField(default=b'https://acme.api.letsencrypt.org/directory', editable=False, max_length=255)),
+                ('directory_url', models.CharField(default=b'https://acme-v01.api.letsencrypt.org/directory', editable=False, max_length=255)),
                 ('is_registered', models.BooleanField(default=False)),
                 ('country', models.CharField(help_text=b'2 letter country code (ISO 3166-1 alpha-2)', max_length=2)),
                 ('state', models.CharField(help_text=b'state or province name', max_length=64)),

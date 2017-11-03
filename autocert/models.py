@@ -8,8 +8,8 @@ import OpenSSL
 from acme import client as acme_client
 from acme import errors
 from acme import jose
+from django.contrib.sites.models import Site
 from django.db import models
-from django.dispatch import receiver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -31,12 +31,20 @@ class AcmeKeyModel(models.Model):
     def get_key(self):
         password = settings.ACCOUNT_KEY_PASSWORD.encode()
         if not self.key:
-            key = rsa.generate_private_key(public_exponent=65537, key_size=settings.BITS, backend=default_backend())
-            self.key = key.private_bytes(encoding=serialization.Encoding.PEM,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.BestAvailableEncryption(password))
+            self.set_key()
             self.save()
         return serialization.load_pem_private_key(self.key.encode(), password=password, backend=default_backend())
+
+    def set_key(self):
+        password = settings.ACCOUNT_KEY_PASSWORD.encode()
+        key = rsa.generate_private_key(public_exponent=65537, key_size=settings.BITS, backend=default_backend())
+        self.key = key.private_bytes(encoding=serialization.Encoding.PEM,
+                                     format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                     encryption_algorithm=serialization.BestAvailableEncryption(password))
+
+    def set_key_if_blank(self):
+        if not self.key:
+            self.set_key()
 
     def get_unencrypted_key(self):
         return self.get_key().private_bytes(encoding=serialization.Encoding.PEM,
@@ -56,6 +64,10 @@ class Account(AcmeKeyModel):
     email_address = models.EmailField()
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        self.set_key_if_blank()
+        super(Account, self).save(*args, **kwargs)
 
     def __unicode__(self):
         return u'{}'.format(self.name)
@@ -78,7 +90,7 @@ class Account(AcmeKeyModel):
 
 class Certificate(AcmeKeyModel):
     site = models.OneToOneField('sites.Site', related_name='certificate')
-    domain = models.CharField(max_length=255, blank=True)
+    domains_to_request = models.TextField(blank=True, help_text='Space separated list of domains to request in cert')
     account = models.ForeignKey(Account)
     csr = models.TextField(blank=True)
     certificate = models.TextField(blank=True)
@@ -86,33 +98,59 @@ class Certificate(AcmeKeyModel):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
-    def get_domain(self):
-        return self.domain or u'{}{}'.format(settings.ENV_PREFIX, self.site.domain)
+    def __unicode__(self):
+        try:
+            return u'Certificate for {}'.format(self.site)
+        except Site.DoesNotExist:
+            return u'Certificate for an undefined site'
 
-    def get_subdomains(self):
-        return [u'{}.{}'.format(subdomain, self.get_domain()) for subdomain in settings.SUBDOMAINS_TO_REQUEST]
+    def save(self, *args, **kwargs):
+        self.set_key_if_blank()
+        self.set_domains_to_request_if_blank()
+        if self.domains_to_request != self.get_previous_value('domains_to_request'):
+            self.csr = ''
+        self.set_csr_if_blank()
+        super(Certificate, self).save(*args, **kwargs)
+
+    def get_previous_value(self, attr):
+        if self.pk:
+            return getattr(Certificate.objects.get(id=self.pk), attr)
+        return None
+
+    def set_domains_to_request_if_blank(self):
+        if self.site and not self.domains_to_request:
+            self.domains_to_request = ' '.join([self.site.domain] + self.get_default_subdomains())
+
+    def get_default_subdomains(self):
+        return [u'{}.{}'.format(subdomain, self.site.domain) for subdomain in settings.DEFAULT_SUBDOMAINS_TO_REQUEST]
 
     def get_all_domains(self):
-        return [self.get_domain()] + self.get_subdomains()
+        return self.domains_to_request.split()
+
+    def get_common_name(self):
+        try:
+            return self.get_all_domains()[0]
+        except IndexError:
+            raise Exception('domains_to_request field is empty')
 
     def get_san_entries(self):
-        return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()]
+        return [x509.DNSName(u'{}'.format(san)) for san in self.get_all_domains()[1:]]
 
-    def generate_csr(self):
-        private_key = self.get_key()
-        builder = x509.CertificateSigningRequestBuilder()
-        builder = builder.subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, self.get_domain()),
-            x509.NameAttribute(NameOID.COUNTRY_NAME, self.account.country),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, self.account.state),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, self.account.locality),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, self.account.organization_name),
-            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self.account.organizational_unit_name),
-        ]))
-        builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
-        csr = builder.sign(private_key, hashes.SHA256(), default_backend())
-        self.csr = csr.public_bytes(serialization.Encoding.PEM)
-        self.save()
+    def set_csr_if_blank(self):
+        if not self.csr:
+            private_key = self.get_key()
+            builder = x509.CertificateSigningRequestBuilder()
+            builder = builder.subject_name(x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, self.get_common_name()),
+                x509.NameAttribute(NameOID.COUNTRY_NAME, u'{}'.format(self.account.country)),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u'{}'.format(self.account.state)),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, u'{}'.format(self.account.locality)),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, u'{}'.format(self.account.organization_name)),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, u'{}'.format(self.account.organizational_unit_name)),
+            ]))
+            builder = builder.add_extension(x509.SubjectAlternativeName(self.get_san_entries()), critical=False)
+            csr = builder.sign(private_key, hashes.SHA256(), default_backend())
+            self.csr = csr.public_bytes(serialization.Encoding.PEM)
 
     def get_wrapped_csr(self):
         csr = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_PEM, self.csr)
@@ -127,7 +165,7 @@ class Certificate(AcmeKeyModel):
         try:
             certr, authzrs = client.poll_and_request_issuance(self.get_wrapped_csr(), authzrs)
         except (errors.Error, errors.PollError) as e:
-            log.error("Challenge polling or issuance failed: {}".format(self.domain, e))
+            raise Exception("Challenge polling or issuance failed: {}".format(e))
         else:
             self.fetch_certificate_and_chain(certr)
 
@@ -157,12 +195,16 @@ class Certificate(AcmeKeyModel):
                 with open(self.get_key_path(domain), 'w') as f:
                     f.write(self.get_unencrypted_key().decode())
         else:
-            log.error('No OUTPUT_DIR specified')
+            raise Exception('No OUTPUT_DIR specified')
+
+    def request_and_write_cert(self):
+        self.request_challenges_and_cert()
+        self.write_to_disk()
 
     def certificate_expires_soon(self, days_left=30):
-        if not self.expiry_date:
+        if not self.certificate_expiry_date:
             return False
-        return datetime.utcnow() + timedelta(days=days_left) > self.expiry_date
+        return datetime.utcnow() + timedelta(days=days_left) > self.certificate_expiry_date
 
     def renew_and_write_if_expiring_soon(self, days_left=30):
         if self.certificate_expires_soon(days_left=days_left):
@@ -180,13 +222,13 @@ class Certificate(AcmeKeyModel):
             return '{}{}'.format(self.certificate, self.intermediate_certificates)
 
     @property
-    def expiry_date(self):
+    def certificate_expiry_date(self):
         if self.certificate:
             cert = x509.load_pem_x509_certificate(str(self.certificate), default_backend())
             return cert.not_valid_after
 
     @property
-    def primary_domain(self):
+    def certificate_common_name(self):
         if self.certificate:
             cert = x509.load_pem_x509_certificate(str(self.certificate), default_backend())
             return cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
@@ -219,9 +261,3 @@ class Challenge(models.Model):
         chall_response = challenge.response(jwk_key)
         client.answer_challenge(challenge, chall_response)
         return authzr
-
-
-@receiver(models.signals.post_save, sender=Certificate, dispatch_uid="generate_csr")
-def generate_csr(sender, instance, created, **kwargs):
-    if not instance.csr:
-        instance.generate_csr()
