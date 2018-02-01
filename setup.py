@@ -7,7 +7,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as readme:
 os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(name='django-autocert',
-      version='0.1.4',
+      version='0.1.5',
       packages=['autocert'],
       include_package_data=True,
       license='MIT',
