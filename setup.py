@@ -17,7 +17,7 @@ setup(name='django-autocert',
       author_email='p@farrell.io',
       url='https://github.com/farrepa/django-autocert/',
       keywords='django ssl certificate acme',
-      install_requires=['acme>=0.9.3', 'Django>=1.8', 'urllib3'],
+      install_requires=['acme>=0.9.3', 'Django>=1.8', 'urllib3', 'josepy'],
       classifiers=[
           'Development Status :: 4 - Beta',
           'Intended Audience :: Developers',
