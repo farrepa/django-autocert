@@ -6,7 +6,6 @@ from datetime import datetime
 from datetime import timedelta
 
 import OpenSSL
-import josepy as jose
 from acme import client as acme_client
 from acme import errors
 from django.contrib.sites.models import Site
@@ -17,6 +16,12 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+
+try:
+    from acme import jose
+except ImportError:
+    import josepy as jose
+
 
 from . import settings
 
